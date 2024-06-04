@@ -46,6 +46,7 @@ public:
     void* InitialTag = nullptr;
     void* WriteTag = nullptr;
     void* ReadTag = nullptr;
+	void* FinishTag = nullptr;
 
 protected:
     void UpdateState(EGrpcContextState NewState);
@@ -141,12 +142,20 @@ protected:
 	{
 		if (!Ok)
 		{
-			Super::RpcReaderWriter->Finish(&(Super::RpcStatus), Super::ReadTag);
-			Super::UpdateState(EGrpcContextState::Done);
+			Super::RpcReaderWriter->Finish(&(Super::RpcStatus), Super::FinishTag);
 			return;
 		}
 
 		FGrpcResult result = GrpcContext::MakeGrpcResult(Super::RpcStatus);
+		if (EventTag == Super::FinishTag) {
+			if (RpcCallbackFunc)
+			{
+				RpcCallbackFunc(result, nullptr);
+			}
+			Super::UpdateState(EGrpcContextState::Done);
+			return;
+		}
+
 		if (Super::RpcStatus.ok())
 		{
 			if (Super::GetState() == EGrpcContextState::Initialing)
@@ -293,11 +302,21 @@ protected:
 	{
 		if (!Ok)
 		{
-			Super::RpcReaderWriter->Finish(&(Super::RpcStatus), Super::ReadTag);
+			Super::RpcReaderWriter->Finish(&(Super::RpcStatus), Super::FinishTag);
 			return;
 		}
 
 		FGrpcResult result = GrpcContext::MakeGrpcResult(Super::RpcStatus);
+		if (EventTag == Super::FinishTag)
+		{
+			if (RpcCallbackFunc)
+			{
+				RpcCallbackFunc(result, &(Super::RpcResponse));
+			}
+			Super::UpdateState(EGrpcContextState::Done);
+			return;
+		}
+		
 		if (Super::RpcStatus.ok())
 		{
 			if (Super::GetState() == EGrpcContextState::Initialing)
