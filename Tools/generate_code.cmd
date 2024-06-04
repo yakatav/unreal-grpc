@@ -4,16 +4,33 @@ setlocal enabledelayedexpansion
 ::set current directory as proto file path
 set INPUT_PROTO_PATH=%cd%
 
-::make sure input proto files exist
-set INPUT_PROTO_FILE=%1
-if not exist %INPUT_PROTO_FILE% (
-	echo Input proto file '%INPUT_PROTO_FILE%' not exist!
-	pause
-	exit /b 1
+:: initialize
+set count=0
+
+:: Searches for proto files and stores them in an array
+for /r "%INPUT_PROTO_PATH%" %%f in (*.proto) do (
+    set /a count+=1
+    set INPUT_PROTO_FILES_ARRAY[!count!]=%%f
+)
+
+:: Display array contents for debugging
+for /l %%i in (1,1,%count%) do (
+    echo Found: !INPUT_PROTO_FILES_ARRAY[%%i]!
+)
+
+:: check array contents
+for /l %%i in (1,1,%count%) do (
+    set "INPUT_PROTO_FILE=!INPUT_PROTO_FILES_ARRAY[%%i]!"
+    if not exist "!INPUT_PROTO_FILE!" (
+        echo Input proto file '!INPUT_PROTO_FILE!' does not exist!
+        endlocal
+        pause
+        exit /b 1
+    )
 )
 
 ::make sure output path exist
-set OUTPUT_PATH=%2
+set OUTPUT_PATH=%1
 if not exist %OUTPUT_PATH% (
 	echo Output path '%OUTPUT_PATH%' not exist!
 	pause
@@ -35,16 +52,6 @@ set CPP_OUTPUT_PATH=%OUTPUT_PATH%\Private\pb
 if not exist %CPP_OUTPUT_PATH% mkdir %CPP_OUTPUT_PATH%
 
 :: Print Variables for debugging
-echo Input proto file: %INPUT_PROTO_FILE%
-echo Output path: %OUTPUT_PATH%
-
-echo TURBOLINK_PLUGIN_PATH=%TURBOLINK_PLUGIN_PATH%
-echo PROTOC_EXE_PATH=%PROTOC_EXE_PATH%
-echo PROTOBUF_INC_PATH=%PROTOBUF_INC_PATH%
-echo GRPC_CPP_PLUGIN_EXE_PATH=%GRPC_CPP_PLUGIN_EXE_PATH%
-echo FIX_PROTO_CPP=%FIX_PROTO_CPP%
-echo FIX_PROTO_H=%FIX_PROTO_H%
-echo CPP_OUTPUT_PATH=%CPP_OUTPUT_PATH%
 
 echo Checking existence of files or directories...
 
@@ -67,17 +74,24 @@ if !errorFlag! equ 1 (
 )
 
 ::call protoc.exe
-"%PROTOC_EXE_PATH%" ^
- --proto_path="%PROTOBUF_INC_PATH%" --proto_path="%INPUT_PROTO_PATH%" ^
- --cpp_out="%CPP_OUTPUT_PATH%" ^
- --plugin=protoc-gen-grpc="%GRPC_CPP_PLUGIN_EXE_PATH%" --grpc_out=%CPP_OUTPUT_PATH% ^
- --plugin=protoc-gen-turbolink="%TURBOLINK_PLUGIN_PATH%" --turbolink_out="%OUTPUT_PATH%" ^
- --turbolink_opt="GenerateJsonCode=true" ^
- %INPUT_PROTO_FILE%
+for /l %%i in (1,1,%count%) do (
+    "%PROTOC_EXE_PATH%" ^
+     --proto_path="%PROTOBUF_INC_PATH%" --proto_path="%INPUT_PROTO_PATH%" ^
+     --cpp_out="%CPP_OUTPUT_PATH%" ^
+     --plugin=protoc-gen-grpc="%GRPC_CPP_PLUGIN_EXE_PATH%" --grpc_out=%CPP_OUTPUT_PATH% ^
+     --plugin=protoc-gen-turbolink="%TURBOLINK_PLUGIN_PATH%" --turbolink_out="%OUTPUT_PATH%" ^
+     --turbolink_opt="GenerateJsonCode=true" ^
+     "!INPUT_PROTO_FILES_ARRAY[%%i]!"
+)
 
-:: fix protobuf compile warning 
-call :FixCompileWarning "%FIX_PROTO_H%" %CPP_OUTPUT_PATH%\%INPUT_PROTO_FILE% "pb.h"
-call :FixCompileWarning "%FIX_PROTO_CPP%" %CPP_OUTPUT_PATH%\%INPUT_PROTO_FILE% "pb.cc"
+
+for /l %%i in (1,1,%count%) do (
+    set PROTO_FILE=!INPUT_PROTO_FILES_ARRAY[%%i]!
+    set RELATIVE_PROTO_FILE=!PROTO_FILE:%INPUT_PROTO_PATH%\=!
+    :: fix protobuf compile warning 
+    call :FixCompileWarning "%FIX_PROTO_H%" %CPP_OUTPUT_PATH%\!RELATIVE_PROTO_FILE! "pb.h"
+    call :FixCompileWarning "%FIX_PROTO_CPP%" %CPP_OUTPUT_PATH%\!RELATIVE_PROTO_FILE! "pb.cc"
+)
 goto :eof
 
 :FixCompileWarning
