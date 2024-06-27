@@ -2,3 +2,5 @@
 /Source/ThirdParty/grpc
 /Source/ThirdParty/protobuf
 /Source/ThirdParty/re2
+
+/Tools/*
